@@ -1,4 +1,4 @@
-# nycmap
+# Customisable and Interactive NYC Map
 
 NYC Interactive Food Map
 A custom, interactive web map built to explore and track viral food spots, halal eateries, and neighborhood itineraries across New York City.
