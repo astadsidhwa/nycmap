@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYC Interactive Pin & Itinerary Map</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body, html {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100vw;
+      background-color: #f8f9fa;
+    }
+
+    /* Controls Overlay */
+    .controls-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 780px;
+      pointer-events: none;
+    }
+
+    .control-panel {
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 6px 10px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .control-panel::-webkit-scrollbar {
+      display: none;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #888;
+      margin-right: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Filter Buttons */
+    .btn {
+      background: #f1f3f5;
+      border: 1px solid #dee2e6;
+      color: #333;
+      padding: 5px 10px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: #e9ecef;
+      border-color: #ced4da;
+    }
+
+    .btn.active {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+    }
+
+    .btn-day.active {
+      background: #007aff;
+      color: #ffffff;
+      border-color: #007aff;
+    }
+
+    .btn-halal.active {
+      background: #2b8a3e;
+      color: #ffffff;
+      border-color: #2b8a3e;
+    }
+
+    .btn-action {
+      background: #e7f5ff;
+      color: #1c7ed6;
+      border-color: #a5d8ff;
+      font-weight: 600;
+    }
+
+    .btn-action:hover {
+      background: #d0ebff;
+    }
+
+    .divider {
+      width: 1px;
+      height: 18px;
+      background: #ced4da;
+      flex-shrink: 0;
+      margin: 0 3px;
+    }
+
+    .pin-counter {
+      font-size: 11px;
+      font-weight: 700;
+      color: #007aff;
+      white-space: nowrap;
+      padding-left: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Custom Emoji Pin */
+    .custom-div-icon {
+      background: none;
+      border: none;
+    }
+
+    .marker-pin {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #222222;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .marker-pin:hover {
+      transform: scale(1.18);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+      z-index: 999 !important;
+    }
+
+    /* Popup Card */
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      padding: 4px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .popup-card {
+      padding: 8px 4px;
+      max-width: 250px;
+    }
+
+    .popup-card h3 {
+      font-size: 15px;
+      color: #111;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+
+    .region-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      background-color: #e9ecef;
+      color: #495057;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .day-tag {
+      font-size: 10px;
+      font-weight: 700;
+      background-color: #e3f2fd;
+      color: #0d47a1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .halal-badge-tag {
+      font-size: 10px;
+      font-weight: 700;
+      background-color: #d3f9d8;
+      color: #2b8a3e;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .timing-badge {
+      font-size: 11px;
+      font-weight: 600;
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+      padding: 3px 6px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .popup-card .address {
+      font-size: 12px;
+      color: #6c757d;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .popup-card .notes {
+      font-size: 12px;
+      color: #333;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .popup-card .gmaps-btn {
+      display: block;
+      text-align: center;
+      background-color: #007aff;
+      color: #ffffff;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 7px 10px;
+      border-radius: 6px;
+      transition: background 0.2s ease;
+    }
+
+    .popup-card .gmaps-btn:hover {
+      background-color: #0056b3;
+    }
+
+    /* Modal Styling */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .modal-card h2 {
+      font-size: 18px;
+      color: #111;
+    }
+
+    .modal-card textarea {
+      width: 100%;
+      height: 180px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn-submit {
+      background: #007aff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-cancel {
+      background: #f1f3f5;
+      color: #333;
+      border: 1px solid #ccc;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Controls Overlay -->
+  <div class="controls-overlay">
+    <!-- Row 1: Itinerary Day Filter & Actions -->
+    <div class="control-panel" id="day-bar">
+      <span class="panel-label">Day:</span>
+      <button class="btn btn-day active" onclick="filterDay('all', this)">📅 All Days</button>
+      <button class="btn btn-day" onclick="filterDay(1, this)">Day 1 (Fri)</button>
+      <button class="btn btn-day" onclick="filterDay(2, this)">Day 2 (Sat)</button>
+      <button class="btn btn-day" onclick="filterDay(3, this)">Day 3 (Sun)</button>
+      <button class="btn btn-day" onclick="filterDay(4, this)">Day 4 (Mon)</button>
+      <button class="btn btn-day" onclick="filterDay(5, this)">Day 5 (Tue)</button>
+      <button class="btn btn-day" onclick="filterDay(6, this)">Day 6 (Wed)</button>
+      <div class="divider"></div>
+      <button class="btn btn-halal" id="halalToggleBtn" onclick="toggleHalalFilter()">🥩 Halal Only</button>
+      <div class="divider"></div>
+      <button class="btn btn-action" onclick="openImportModal()">📥 Import JSON</button>
+      <button class="btn btn-action" onclick="resetToDefault()">🔄 Reset</button>
+      <div class="divider"></div>
+      <span class="pin-counter" id="counter">0 Pins</span>
+    </div>
+
+    <!-- Row 2: Category Filter -->
+    <div class="control-panel" id="category-bar">
+      <span class="panel-label">Type:</span>
+      <button class="btn active" onclick="filterCategory('all', this)">📍 All</button>
+      <button class="btn" onclick="filterCategory('dumplings', this)">🥟 Dumplings</button>
+      <button class="btn" onclick="filterCategory('delis', this)">🥯 Delis</button>
+      <button class="btn" onclick="filterCategory('street-food', this)">🌮 Street Food</button>
+      <button class="btn" onclick="filterCategory('pizza', this)">🍕 Pizza</button>
+      <button class="btn" onclick="filterCategory('bbq', this)">🍖 BBQ</button>
+      <button class="btn" onclick="filterCategory('hotdogs', this)">🌭 Hot Dogs</button>
+      <button class="btn" onclick="filterCategory('markets', this)">🛒 Markets</button>
+      <button class="btn" onclick="filterCategory('shopping', this)">🛍️ Shopping</button>
+      <button class="btn" onclick="filterCategory('museums', this)">🎨 Museums</button>
+      <button class="btn" onclick="filterCategory('parks', this)">🌳 Parks</button>
+      <button class="btn" onclick="filterCategory('sports', this)">🥊 Sports & Shows</button>
+    </div>
+
+    <!-- Row 3: Regional Quick-Zoom -->
+    <div class="control-panel">
+      <span class="panel-label">Zoom:</span>
+      <button class="btn" onclick="zoomToRegion(40.7400, -73.9800, 12)">🗽 All NYC</button>
+      <button class="btn" onclick="zoomToRegion(40.7160, -73.9940, 15)">Chinatown / LES</button>
+      <button class="btn" onclick="zoomToRegion(40.7500, -73.9900, 14)">Midtown & Chelsea</button>
+      <button class="btn" onclick="zoomToRegion(40.7950, -73.9600, 13)">Upper West / Harlem</button>
+      <button class="btn" onclick="zoomToRegion(40.6900, -73.9800, 13)">Brooklyn</button>
+      <button class="btn" onclick="zoomToRegion(40.8000, -73.8600, 12)">Queens & Bronx</button>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal-backdrop" id="importModal">
+    <div class="modal-card">
+      <h2>📥 Import New Pins (JSON)</h2>
+      <p style="font-size:12px; color:#666;">Paste a JSON array of new locations below to add them directly to your live map.</p>
+      <textarea id="jsonInput" placeholder='[{"id":"my-spot", "name":"New Spot", "emoji":"📍", "category":"street-food", "day":1, "isHalal":true, "address":"NYC", "coordinates":[40.7128, -74.0060], "region":"Manhattan", "notes":"Great spot", "priceLevel":"$"}]'></textarea>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeImportModal()">Cancel</button>
+        <button class="btn-submit" onclick="submitJSON()">Add to Map</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Canvas -->
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // Master Default Dataset
+    const defaultPlaces = [
+      { "id": "the-vessel", "name": "The Vessel & High Line", "emoji": "🌳", "category": "parks", "day": 1, "isHalal": true, "address": "20 Hudson Yards, New York, NY 10001", "coordinates": [40.7538, -74.0022], "region": "Hudson Yards", "notes": "Start the 1.5-mile High Line elevated walk here south to Chelsea.", "priceLevel": "Free" },
+      { "id": "mercado-little-spain", "name": "Mercado Little Spain", "emoji": "🛒", "category": "markets", "day": 1, "isHalal": true, "address": "10 Hudson Yards, New York, NY 10001", "coordinates": [40.7533, -74.0016], "region": "Hudson Yards", "notes": "José Andrés Spanish food hall — great for morning coffee & seafood paella.", "priceLevel": "$$" },
+      { "id": "chelsea-market", "name": "Chelsea Market", "emoji": "🛒", "category": "markets", "day": 1, "isHalal": true, "address": "75 9th Ave, New York, NY 10011", "coordinates": [40.7420, -74.0048], "region": "Chelsea", "notes": "Historic indoor market hall packed with artisan vendors.", "priceLevel": "$$" },
+      { "id": "los-tacos-no1", "name": "Los Tacos No. 1", "emoji": "🌮", "category": "street-food", "day": 1, "isHalal": false, "address": "75 9th Ave, New York, NY 10011", "coordinates": [40.7421, -74.0048], "region": "Chelsea", "notes": "Incredible Tijuana-style tacos inside Chelsea Market.", "priceLevel": "$" },
+      { "id": "pier-57-rooftop", "name": "Pier 57 Rooftop & Food Hall", "emoji": "🌳", "category": "parks", "day": 1, "isHalal": true, "address": "25 11th Ave, New York, NY 10011", "coordinates": [40.7431, -74.0090], "region": "Chelsea", "notes": "Free public rooftop park with sweeping Hudson River views.", "priceLevel": "Free" },
+      { "id": "fishs-eddy", "name": "Fishs Eddy", "emoji": "🛍️", "category": "shopping", "day": 1, "isHalal": true, "address": "889 Broadway, New York, NY 10003", "coordinates": [40.7388, -73.9898], "region": "Flatiron", "notes": "Quirky, vintage NYC ceramics and kitchenware — great gift spot.", "priceLevel": "$$" },
+      { "id": "greenwich-letterpress", "name": "Greenwich Letterpress", "emoji": "🛍️", "category": "shopping", "day": 1, "isHalal": true, "address": "15 Christopher St, New York, NY 10014", "coordinates": [40.7337, -74.0018], "region": "West Village", "notes": "Charming boutique for tiny gifts, pins, and custom trinkets.", "priceLevel": "$$" },
+      { "id": "artful-posters", "name": "Artful Posters", "emoji": "🛍️", "category": "shopping", "day": 1, "isHalal": true, "address": "196 Bleecker St, New York, NY 10012", "coordinates": [40.7314, -74.0031], "region": "West Village", "notes": "Vintage movie posters and unique wall prints.", "priceLevel": "$" },
+      { "id": "bleecker-st-pizza", "name": "Bleecker St Pizza", "emoji": "🍕", "category": "pizza", "day": 1, "isHalal": false, "address": "69 7th Ave S, New York, NY 10014", "coordinates": [40.7319, -74.0036], "region": "West Village", "notes": "Famous nonna-style thin crust pizza slice joint.", "priceLevel": "$" },
+      { "id": "umeko-sushi", "name": "Umeko", "emoji": "🍣", "category": "sports", "day": 1, "isHalal": true, "address": "63 Downing St, New York, NY 10014", "coordinates": [40.7298, -74.0035], "region": "West Village", "notes": "Intimate Japanese omakase & fresh fish don sets.", "priceLevel": "$$$" },
+      { "id": "sushi-spot", "name": "Sushi Spot", "emoji": "🍣", "category": "sports", "day": 1, "isHalal": true, "address": "West Village, New York, NY 10014", "coordinates": [40.7305, -74.0012], "region": "West Village", "notes": "Quick, cheap fish sushi rolls on the go.", "priceLevel": "$" },
+      { "id": "whitney-museum", "name": "Whitney Museum", "emoji": "🎨", "category": "museums", "day": 1, "isHalal": true, "timingBadge": "Free Fridays 5PM–10PM (Book online)", "address": "99 Gansevoort St, New York, NY 10014", "coordinates": [40.7396, -74.0089], "region": "Meatpacking", "notes": "Modern American art with open-air terrace views.", "priceLevel": "Free" },
+      { "id": "smorgasburg-wtc", "name": "Smorgasburg WTC", "emoji": "🛒", "category": "markets", "day": 1, "isHalal": true, "timingBadge": "Thursdays & Fridays Only", "address": "185 Greenwich St, New York, NY 10007", "coordinates": [40.7115, -74.0125], "region": "Financial District", "notes": "Outdoor open-air street food market outside The Oculus.", "priceLevel": "$$" },
+      { "id": "gleasons-gym", "name": "Gleason's Gym", "emoji": "🥊", "category": "sports", "day": 2, "isHalal": true, "address": "130 Water St, Brooklyn, NY 11201", "coordinates": [40.7037, -73.9875], "region": "DUMBO", "notes": "Historic boxing gym where Muhammad Ali and Robert De Niro trained.", "priceLevel": "$$" },
+      { "id": "brooklyn-flea", "name": "Brooklyn Flea Market", "emoji": "🛒", "category": "markets", "day": 2, "isHalal": true, "timingBadge": "Saturdays & Sundays 10AM–5PM", "address": "80 Pearl St, Brooklyn, NY 11201", "coordinates": [40.7036, -73.9893], "region": "DUMBO", "notes": "Famous vintage, antique, and artisanal flea market under the bridge.", "priceLevel": "$$" },
+      { "id": "vinyl-threads", "name": "Vinyl + Threads", "emoji": "🛍️", "category": "shopping", "day": 2, "isHalal": true, "address": "69 Jay St, Brooklyn, NY 11201", "coordinates": [40.7031, -73.9882], "region": "DUMBO", "notes": "Vinyl records, vintage apparel, and curated gifts.", "priceLevel": "$$" },
+      { "id": "time-out-market", "name": "Time Out Market", "emoji": "🛒", "category": "markets", "day": 2, "isHalal": true, "address": "55 Water St, Brooklyn, NY 11201", "coordinates": [40.7042, -73.9924], "region": "DUMBO", "notes": "Multi-vendor food hall on the DUMBO waterfront.", "priceLevel": "$$" },
+      { "id": "sailor-siren", "name": "Sailor Siren Lobster Rolls", "emoji": "🦞", "category": "bbq", "day": 2, "isHalal": true, "address": "817 Manhattan Ave, Brooklyn, NY 11222", "coordinates": [40.7297, -73.9542], "region": "Greenpoint", "notes": "Fresh Maine lobster rolls topped with uni and caviar.", "priceLevel": "$$" },
+      { "id": "hometown-bbq", "name": "Hometown BBQ", "emoji": "🍖", "category": "bbq", "day": 2, "isHalal": false, "address": "454 Van Brunt St, Brooklyn, NY 11231", "coordinates": [40.6748, -74.0160], "region": "Red Hook", "notes": "Pit-smoked brisket and Red Hook style lobster rolls.", "priceLevel": "$$" },
+      { "id": "momo-crawl", "name": "Jackson Heights Momo Crawl", "emoji": "🌮", "category": "street-food", "day": 2, "isHalal": true, "address": "Roosevelt Ave & 74th St, Queens, NY 11372", "coordinates": [40.7468, -73.8914], "region": "Jackson Heights", "notes": "Self-guided crawl for $1-$2 Tibetan and Nepalese dumplings.", "priceLevel": "$" },
+      { "id": "queens-night-market", "name": "Queens Night Market", "emoji": "🛒", "category": "markets", "day": 2, "isHalal": true, "timingBadge": "Saturdays 4PM–Midnight", "address": "4701 111th St, Queens, NY 11368", "coordinates": [40.7454, -73.8444], "region": "Flushing", "notes": "Open-air night market with 100+ global street food vendors.", "priceLevel": "$" },
+      { "id": "john-brown-bbq", "name": "John Brown BBQ", "emoji": "🍖", "category": "bbq", "day": 2, "isHalal": false, "address": "40-01 28th St, Long Island City, NY 11101", "coordinates": [40.7485, -73.9502], "region": "Long Island City", "notes": "Kansas City style burnt ends and ribs.", "priceLevel": "$$" },
+      { "id": "ess-a-bagel", "name": "Ess-a-Bagel", "emoji": "🥯", "category": "delis", "day": 3, "isHalal": true, "address": "831 3rd Ave, New York, NY 10022", "coordinates": [40.7563, -73.9696], "region": "Midtown East", "notes": "Massive, chewy classic NYC bagels with custom cream cheese spreads.", "priceLevel": "$" },
+      { "id": "omusubi-gonbei", "name": "Omusubi Gonbei", "emoji": "🍣", "category": "sports", "day": 3, "isHalal": true, "address": "370 Lexington Ave, New York, NY 10017", "coordinates": [40.7510, -73.9760], "region": "Midtown East", "notes": "Handmade grab-and-go Japanese rice balls (onigiri).", "priceLevel": "$" },
+      { "id": "ny-public-library", "name": "New York Public Library", "emoji": "🎨", "category": "museums", "day": 3, "isHalal": true, "address": "476 5th Ave, New York, NY 10018", "coordinates": [40.7532, -73.9822], "region": "Midtown", "notes": "Historic Rose Main Reading Room at Bryant Park.", "priceLevel": "Free" },
+      { "id": "shaver-hall", "name": "Shaver Hall & Pick & Cheese", "emoji": "🛒", "category": "markets", "day": 3, "isHalal": true, "address": "424 5th Ave, New York, NY 10018", "coordinates": [40.7516, -73.9835], "region": "Midtown", "notes": "Unique cheese conveyor belt dining experience.", "priceLevel": "$$" },
+      { "id": "pasta-de-pasta", "name": "Pasta de Pasta / Gnocchi on 9th", "emoji": "🍕", "category": "pizza", "day": 3, "isHalal": true, "address": "9th Ave, New York, NY 10019", "coordinates": [40.7602, -73.9898], "region": "Hell's Kitchen", "notes": "Fresh homemade gnocchi and hand-rolled pasta.", "priceLevel": "$$" },
+      { "id": "uncle-rays", "name": "Uncle Ray's Chicken Rice", "emoji": "🌮", "category": "street-food", "day": 3, "isHalal": true, "address": "790 9th Ave, New York, NY 10019", "coordinates": [40.7634, -73.9881], "region": "Hell's Kitchen", "notes": "Authentic Singaporean Hainanese chicken rice.", "priceLevel": "$" },
+      { "id": "guggenheim", "name": "Guggenheim Museum", "emoji": "🎨", "category": "museums", "day": 3, "isHalal": true, "timingBadge": "Sun & Tue 4PM–5:30PM Pay-As-You-Wish", "address": "1071 5th Ave, New York, NY 10128", "coordinates": [40.7830, -73.9590], "region": "Upper East Side", "notes": "Frank Lloyd Wright spiral architecture and modern art.", "priceLevel": "$" },
+      { "id": "adels-halal", "name": "Adel's Halal Cart", "emoji": "🌮", "category": "street-food", "day": 3, "isHalal": true, "timingBadge": "Open 6PM–5AM Late Night", "address": "1221 6th Ave, New York, NY 10020", "coordinates": [40.7594, -73.9820], "region": "Midtown", "notes": "Famous late-night halal spicy chicken and lamb over rice.", "priceLevel": "$" },
+      { "id": "lectures-on-tap", "name": "Lectures on Tap", "emoji": "🥊", "category": "sports", "day": 3, "isHalal": true, "timingBadge": "Check Weekly Schedule (7PM–9PM)", "address": "Lower East Side / East Village, New York, NY", "coordinates": [40.7210, -73.9870], "region": "Lower East Side", "notes": "Pop-up expert talks hosted inside casual local bars.", "priceLevel": "$" },
+      { "id": "russ-and-daughters", "name": "Russ & Daughters", "emoji": "🥯", "category": "delis", "day": 4, "isHalal": true, "address": "179 E Houston St, New York, NY 10002", "coordinates": [40.7226, -73.9882], "region": "Lower East Side", "notes": "Centuries-old appetizing shop for smoked salmon and lox.", "priceLevel": "$$" },
+      { "id": "golden-diner", "name": "Golden Diner", "emoji": "🥯", "category": "delis", "day": 4, "isHalal": false, "address": "123 Madison St, New York, NY 10002", "coordinates": [40.7126, -73.9947], "region": "Two Bridges", "notes": "Famous for honey butter stack pancakes.", "priceLevel": "$$" },
+      { "id": "sunday-morning", "name": "Sunday Morning Cinnamon Rolls", "emoji": "🥯", "category": "delis", "day": 4, "isHalal": true, "address": "29 Ave B, New York, NY 10009", "coordinates": [40.7225, -73.9806], "region": "East Village", "notes": "Freshly baked warm cinnamon rolls.", "priceLevel": "$" },
+      { "id": "apollo-bagels", "name": "Apollo Bagels", "emoji": "🥯", "category": "delis", "day": 4, "isHalal": true, "address": "242 E 10th St, New York, NY 10003", "coordinates": [40.7285, -73.9818], "region": "East Village", "notes": "Sourdough bagels topped with cured fish and fresh produce.", "priceLevel": "$" },
+      { "id": "chens-watches", "name": "Chen's & Yan's Watches & Antiques", "emoji": "🛍️", "category": "shopping", "day": 4, "isHalal": true, "address": "Mott St, New York, NY 10013", "coordinates": [40.7151, -73.9972], "region": "Chinatown", "notes": "Vintage watches, estate jewelry, and antiques.", "priceLevel": "$$" },
+      { "id": "mei-lai-wah", "name": "Mei Lai Wah", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": false, "address": "64 Mott St, New York, NY 10013", "coordinates": [40.7153, -73.9976], "region": "Chinatown", "notes": "Famous baked pork buns and egg custard buns.", "priceLevel": "$" },
+      { "id": "king-dumplings", "name": "King Dumplings", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": false, "address": "74 Hester St, New York, NY 10002", "coordinates": [40.7163, -73.9918], "region": "Chinatown", "notes": "Cheap thin-skinned pork and chive dumplings.", "priceLevel": "$" },
+      { "id": "shanghai-time", "name": "Shanghai Time", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": false, "address": "Chinatown, New York, NY 10013", "coordinates": [40.7151, -73.9984], "region": "Chinatown", "notes": "Pan-fried pork dumplings and soup dumplings.", "priceLevel": "$" },
+      { "id": "jin-mei", "name": "Jin Mei Dumplings", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": false, "address": "25B Henry St, New York, NY 10002", "coordinates": [40.7142, -73.9950], "region": "Chinatown", "notes": "Thick, fluffy fried dumplings.", "priceLevel": "$" },
+      { "id": "shu-jiao-fu-zhou", "name": "Shu Jiao Fu Zhou", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": false, "address": "118 Eldridge St, New York, NY 10002", "coordinates": [40.7175, -73.9926], "region": "Chinatown", "notes": "Peanut butter noodles and cheap wheat-skin dumplings.", "priceLevel": "$" },
+      { "id": "wah-fung-no1", "name": "Wah Fung No 1 Fast Food", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": false, "address": "79 Chrystie St, New York, NY 10002", "coordinates": [40.7173, -73.9936], "region": "Chinatown", "notes": "Famous budget roast duck & char siu rice boxes.", "priceLevel": "$" },
+      { "id": "west-rice-rolls", "name": "West Rice Rolls King", "emoji": "🥟", "category": "dumplings", "day": 4, "isHalal": true, "address": "Eldridge St, New York, NY 10002", "coordinates": [40.7168, -73.9934], "region": "Chinatown", "notes": "Steamed fresh shrimp rice rolls.", "priceLevel": "$" },
+      { "id": "deluxe-food-market", "name": "Deluxe Food Market", "emoji": "🛒", "category": "markets", "day": 4, "isHalal": true, "address": "79 Elizabeth St, New York, NY 10013", "coordinates": [40.7167, -73.9972], "region": "Chinatown", "notes": "Massive Asian market filled with prepared meats and dim sum.", "priceLevel": "$" },
+      { "id": "november-19", "name": "November 19", "emoji": "🛍️", "category": "shopping", "day": 4, "isHalal": true, "address": "37 Orchard St, New York, NY 10002", "coordinates": [40.7153, -73.9904], "region": "Lower East Side", "notes": "Curated lifestyle boutique with homeware and accessories.", "priceLevel": "$$" },
+      { "id": "a-shop-of-things", "name": "A Shop of Things", "emoji": "🛍️", "category": "shopping", "day": 4, "isHalal": true, "address": "30 Orchard St, New York, NY 10002", "coordinates": [40.7147, -73.9902], "region": "Lower East Side", "notes": "Cute gifts, pins, keychains, and quirky decor.", "priceLevel": "$" },
+      { "id": "tashkent-supermarket", "name": "Tashkent Supermarket", "emoji": "🛒", "category": "markets", "day": 4, "isHalal": true, "address": "378 6th Ave, New York, NY 10011", "coordinates": [40.7289, -73.9932], "region": "Greenwich Village", "notes": "Central Asian & Uzbek buffet market loaded with samsas and kebabs.", "priceLevel": "$" },
+      { "id": "hey-tea", "name": "Hey Tea Boba", "emoji": "🌮", "category": "street-food", "day": 4, "isHalal": true, "address": "St Marks Pl, New York, NY 10003", "coordinates": [40.7286, -73.9897], "region": "East Village", "notes": "Famous cheese foam fruit tea and boba.", "priceLevel": "$" },
+      { "id": "katzs-deli", "name": "Katz's Delicatessen", "emoji": "🥯", "category": "delis", "day": 4, "isHalal": false, "address": "205 E Houston St, New York, NY 10002", "coordinates": [40.7222, -73.9874], "region": "Lower East Side", "notes": "Legendary pastrami on rye sandwich heavyweight.", "priceLevel": "$$" },
+      { "id": "betos-carnitas", "name": "Beto's Carnitas", "emoji": "🌮", "category": "street-food", "day": 4, "isHalal": false, "address": "Clinton St, New York, NY 10002", "coordinates": [40.7188, -73.9855], "region": "Lower East Side", "notes": "Michoacán-style braised pork carnitas tacos.", "priceLevel": "$" },
+      { "id": "grays-papaya", "name": "Gray's Papaya", "emoji": "🌭", "category": "hotdogs", "day": 5, "isHalal": false, "address": "2090 Broadway, New York, NY 10023", "coordinates": [40.7788, -73.9818], "region": "Upper West Side", "notes": "Recession special: 2 snap-casing dogs and a papaya drink.", "priceLevel": "$" },
+      { "id": "met-hotdog-king", "name": "Hot Dog Kings (The Met)", "emoji": "🌭", "category": "hotdogs", "day": 5, "isHalal": true, "address": "82nd St & 5th Ave, New York, NY 10028", "coordinates": [40.7794, -73.9632], "region": "Upper East Side", "notes": "Iconic hot dog cart permanently stationed on museum steps.", "priceLevel": "$" },
+      { "id": "charles-pan-fried", "name": "Charles Pan-Fried Chicken", "emoji": "🍖", "category": "bbq", "day": 5, "isHalal": false, "address": "340 W 145th St, New York, NY 10039", "coordinates": [40.8249, -73.9443], "region": "Harlem", "notes": "Skillet-fried chicken and classic soul food sides.", "priceLevel": "$" },
+      { "id": "dinosaur-bbq", "name": "Dinosaur BBQ", "emoji": "🍖", "category": "bbq", "day": 5, "isHalal": false, "address": "700 W 125th St, New York, NY 10027", "coordinates": [40.8183, -73.9602], "region": "Harlem", "notes": "Hearty slow-smoked ribs and pulled pork.", "priceLevel": "$$" },
+      { "id": "ny-botanical-garden", "name": "NY Botanical Garden", "emoji": "🌳", "category": "parks", "day": 6, "isHalal": true, "timingBadge": "Wednesdays 10AM–11AM Free Grounds Access", "address": "2900 Southern Blvd, Bronx, NY 10458", "coordinates": [40.8624, -73.8774], "region": "The Bronx", "notes": "Vast green gardens and historic glass greenhouse.", "priceLevel": "Free" },
+      { "id": "bronx-zoo", "name": "Bronx Zoo", "emoji": "🌳", "category": "parks", "day": 6, "isHalal": true, "address": "2300 Southern Blvd, Bronx, NY 10460", "coordinates": [40.8506, -73.8770], "region": "The Bronx", "notes": "World-famous zoo right next door to Botanical Gardens.", "priceLevel": "$$" },
+      { "id": "turnstyle-market", "name": "Turnstyle Underground Market", "emoji": "🛒", "category": "markets", "day": 6, "isHalal": true, "address": "Columbus Circle Subway Station, NY 10019", "coordinates": [40.7681, -73.9819], "region": "Midtown West", "notes": "Underground food hall inside Columbus Circle station.", "priceLevel": "$" },
+      { "id": "kome-kome", "name": "Kome Kome", "emoji": "🍣", "category": "sports", "day": 6, "isHalal": true, "address": "Columbus Circle Underground, NY 10019", "coordinates": [40.7682, -73.9818], "region": "Midtown West", "notes": "Fresh Japanese fish onigiri inside Turnstyle Market.", "priceLevel": "$" },
+      { "id": "staten-island-ferry", "name": "Staten Island Ferry", "emoji": "🌳", "category": "parks", "day": 6, "isHalal": true, "address": "4 Whitehall St, New York, NY 10004", "coordinates": [40.7013, -74.0132], "region": "Financial District", "notes": "Free 24/7 harbor boat trip with views of Statue of Liberty.", "priceLevel": "Free" },
+  {
+    "id": "nishaan-pakistani-chopped-cheese",
+    "name": "Nishaan (Pakistani Chopped Cheese)",
+    "emoji": "🥯",
+    "category": "delis",
+    "day": 4,
+    "isHalal": true,
+    "address": "160 1st Ave, New York, NY 10009",
+    "coordinates": [40.7281, -73.9839],
+    "region": "East Village",
+    "notes": "Home of the viral Chapli Kabab Chopped Cheese & Elotes Chaat.",
+    "priceLevel": "$$"
+  },
+  {
+    "id": "general-ock-ocky-way",
+    "name": "General Ock (The Ocky Way)",
+    "emoji": "🥯",
+    "category": "delis",
+    "day": 2,
+    "isHalal": true,
+    "address": "603 Clinton St, Brooklyn, NY 11231",
+    "coordinates": [40.6728, -74.0094],
+    "region": "Red Hook",
+    "notes": "TikTok viral bodega famous for over-the-top 'Ocky Way' chopped cheese.",
+    "priceLevel": "$"
+  },
+  {
+    "id": "bk-jani",
+    "name": "BK JANI",
+    "emoji": "🍖",
+    "category": "bbq",
+    "day": 2,
+    "isHalal": true,
+    "address": "276 Knickerbocker Ave, Brooklyn, NY 11237",
+    "coordinates": [40.7018, -73.9264],
+    "region": "Bushwick",
+    "notes": "Viral Pakistani artisan burger spot famous for spicy mint chutney burgers.",
+    "priceLevel": "$$"
+  },
+  {
+    "id": "jiangs-kitchen",
+    "name": "Jiang's Kitchen",
+    "emoji": "🥟",
+    "category": "dumplings",
+    "day": 4,
+    "isHalal": true,
+    "address": "65 St Marks Pl, New York, NY 10003",
+    "coordinates": [40.7286, -73.9872],
+    "region": "East Village",
+    "notes": "Viral Halal Northern Chinese hand-pulled cumin lamb noodles & dumplings.",
+    "priceLevel": "$$"
+  },
+  {
+    "id": "chai-chenak",
+    "name": "Chai Chenak",
+    "emoji": "🥯",
+    "category": "delis",
+    "day": 2,
+    "isHalal": true,
+    "address": "1206 Coney Island Ave, Brooklyn, NY 11230",
+    "coordinates": [40.6272, -73.9631],
+    "region": "Brooklyn",
+    "notes": "Viral Pakistani dhaba cafe for Karak Chai, Bun Kababs, and Paratha Rolls.",
+    "priceLevel": "$"
+  },
+  {
+    "id": "ayat-palestinian",
+    "name": "Ayat",
+    "emoji": "🌮",
+    "category": "street-food",
+    "day": 2,
+    "isHalal": true,
+    "address": "8530 3rd Ave, Brooklyn, NY 11209",
+    "coordinates": [40.6231, -74.0305],
+    "region": "Brooklyn",
+    "notes": "Viral Palestinian bistro famous for traditional Mansaf and Kunafa.",
+    "priceLevel": "$$"
+  },
+  {
+    "id": "oodles-halal-ramen",
+    "name": "Oodles Halal Ramen",
+    "emoji": "🍣",
+    "category": "sports",
+    "day": 2,
+    "isHalal": true,
+    "address": "1298 Myrtle Ave, Brooklyn, NY 11221",
+    "coordinates": [40.6982, -73.9295],
+    "region": "Brooklyn",
+    "notes": "Viral 100% Halal Japanese ramen and sushi bar.",
+    "priceLevel": "$$"
+  },
+  {
+    "id": "royal-grill-halal",
+    "name": "Royal Grill Halal Food",
+    "emoji": "🌮",
+    "category": "street-food",
+    "day": 3,
+    "isHalal": true,
+    "address": "W 44th St & 6th Ave, New York, NY 10018",
+    "coordinates": [40.7562, -73.9831],
+    "region": "Midtown",
+    "notes": "Vendy Award-winning street cart famous for spicy chicken tikka over rice.",
+    "priceLevel": "$"
+  },
+  {
+    "id": "fluffies-hot-chicken",
+    "name": "Fluffies Hot Chicken",
+    "emoji": "🍖",
+    "category": "bbq",
+    "day": 3,
+    "isHalal": true,
+    "address": "171 Madison Ave, New York, NY 10016",
+    "coordinates": [40.7471, -73.9822],
+    "region": "Midtown",
+    "notes": "Viral Halal Nashville-style hot chicken tender sliders.",
+    "priceLevel": "$$"
+  }
+    ];
+
+    // Non-food categories implicitly halal
+    const nonFoodCategories = ['parks', 'museums', 'shopping', 'sports', 'markets'];
+
+    function getStoredPlaces() {
+      const stored = localStorage.getItem('nyc_map_places');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {
+          console.error('Failed to parse local storage, returning defaults');
+        }
+      }
+      return defaultPlaces;
+    }
+
+    let places = getStoredPlaces();
+    let activeCategory = 'all';
+    let activeDay = 'all';
+    let halalOnlyFilter = false;
+    let markerStore = [];
+
+    // Initialize Map
+    const map = L.map('map', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView([40.7400, -73.9800], 12);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd'
+    }).addTo(map);
+
+    function renderPins() {
+      markerStore.forEach(item => map.removeLayer(item.markerInstance));
+      markerStore = [];
+
+      places.forEach(place => {
+        const customIcon = L.divIcon({
+          html: `<div class="marker-pin">${place.emoji || '📍'}</div>`,
+          className: 'custom-div-icon',
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+          popupAnchor: [0, -18]
+        });
+
+        const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((place.name || '') + ' ' + (place.address || ''))}`;
+        const badgeHtml = place.timingBadge ? `<div class="timing-badge">⏰ ${place.timingBadge}</div>` : '';
+        const halalBadge = (place.isHalal || nonFoodCategories.includes(place.category)) 
+          ? `<span class="halal-badge-tag">🥩 Halal Friendly</span>` 
+          : '';
+
+        const popupContent = `
+          <div class="popup-card">
+            <h3><span>${place.emoji || '📍'}</span> ${place.name}</h3>
+            <div class="meta-row">
+              <span class="region-tag">${place.region || 'NYC'}</span>
+              <span class="day-tag">Day ${place.day || 1}</span>
+              ${halalBadge}
+            </div>
+            ${badgeHtml}
+            <div class="address">${place.address || ''}</div>
+            <div class="notes">${place.notes || ''}</div>
+            <a href="${gmapsUrl}" target="_blank" class="gmaps-btn">Open in Google Maps ➔</a>
+          </div>
+        `;
+
+        const marker = L.marker(place.coordinates, { icon: customIcon }).bindPopup(popupContent);
+
+        markerStore.push({
+          category: place.category,
+          day: place.day,
+          isHalal: place.isHalal || nonFoodCategories.includes(place.category),
+          markerInstance: marker
+        });
+      });
+
+      applyFilters();
+    }
+
+    function applyFilters() {
+      let visibleCount = 0;
+      markerStore.forEach(item => {
+        const matchesCategory = (activeCategory === 'all' || item.category === activeCategory);
+        const matchesDay = (activeDay === 'all' || item.day === activeDay);
+        const matchesHalal = (!halalOnlyFilter || item.isHalal === true);
+
+        if (matchesCategory && matchesDay && matchesHalal) {
+          item.markerInstance.addTo(map);
+          visibleCount++;
+        } else {
+          map.removeLayer(item.markerInstance);
+        }
+      });
+      document.getElementById('counter').innerText = `${visibleCount} ${visibleCount === 1 ? 'Pin' : 'Pins'}`;
+    }
+
+    function filterDay(day, btnElement) {
+      document.querySelectorAll('#day-bar .btn-day').forEach(btn => btn.classList.remove('active'));
+      btnElement.classList.add('active');
+      activeDay = day;
+      applyFilters();
+    }
+
+    function filterCategory(category, btnElement) {
+      document.querySelectorAll('#category-bar .btn').forEach(btn => btn.classList.remove('active'));
+      btnElement.classList.add('active');
+      activeCategory = category;
+      applyFilters();
+    }
+
+    function toggleHalalFilter() {
+      halalOnlyFilter = !halalOnlyFilter;
+      const btn = document.getElementById('halalToggleBtn');
+      if (halalOnlyFilter) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+      applyFilters();
+    }
+
+    function zoomToRegion(lat, lng, zoomLevel) {
+      map.flyTo([lat, lng], zoomLevel, { duration: 1.2, easeLinearity: 0.25 });
+    }
+
+    function openImportModal() {
+      document.getElementById('importModal').style.display = 'flex';
+    }
+
+    function closeImportModal() {
+      document.getElementById('importModal').style.display = 'none';
+      document.getElementById('jsonInput').value = '';
+    }
+
+    function submitJSON() {
+      const rawText = document.getElementById('jsonInput').value.trim();
+      if (!rawText) return;
+
+      try {
+        const parsed = JSON.parse(rawText);
+        const newItems = Array.isArray(parsed) ? parsed : [parsed];
+
+        places = [...places, ...newItems];
+        localStorage.setItem('nyc_map_places', JSON.stringify(places));
+        renderPins();
+        closeImportModal();
+        alert(`Successfully added ${newItems.length} new pin(s)!`);
+      } catch (e) {
+        alert("Invalid JSON format! Make sure you copied the full array.");
+      }
+    }
+
+    function resetToDefault() {
+      if (confirm("Reset map to original list? (This clears any imported pins)")) {
+        localStorage.removeItem('nyc_map_places');
+        places = [...defaultPlaces];
+        renderPins();
+      }
+    }
+
+    renderPins();
+  </script>
+</body>
+</html>
